@@ -67,7 +67,7 @@ max_uzytych_tankow = st.sidebar.number_input(
 
 st.sidebar.subheader("Kwasowość")
 kwas_jednostka = st.sidebar.radio(
-    "Jednostka Kwasowości", ["CA", "MA"], horizontal=True
+    "Jednostka Kwasowości", ["MA", "CA"], horizontal=True
 )
 col_k1, col_k2 = st.sidebar.columns(2)
 kwas_min = col_k1.number_input("Kwas MIN", value=2.2, step=0.01)
