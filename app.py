@@ -93,7 +93,7 @@ pozwol_na_wode = st.sidebar.checkbox(
     "Zbijanie Brixa wodą", value=True
 )
 
-if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
+if st.sidebar.button("🚀 Losu Losu", type="primary"):
     st.session_state["obliczono"] = True
     for key in list(st.session_state.keys()):
         if key.startswith("df_res_"):
