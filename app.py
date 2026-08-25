@@ -23,7 +23,6 @@ def pobierz_dane(file_id):
     return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
 
 
-# Pobieramy wstępnie dane do tabeli wyboru zbiorników
 try:
     df_raw = pobierz_dane(gdrive_id)
     df_raw.columns = df_raw.columns.str.strip()
@@ -33,10 +32,8 @@ try:
 except Exception:
     lista_zbiornikow = []
 
-# Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe")
 
-# Domyślne zaznaczenie: True tylko dla zbiorników zaczynających się od "TZH-"
 domyslne_zaznaczenie = [z.startswith("TZH-") for z in lista_zbiornikow]
 
 df_selekcja_init = pd.DataFrame({
@@ -98,7 +95,6 @@ pozwol_na_wode = st.sidebar.checkbox(
 
 if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     st.session_state["obliczono"] = True
-    # Czyszczenie starych wyników przy przeliczeniu od nowa
     for key in list(st.session_state.keys()):
         if key.startswith("df_res_"):
             del st.session_state[key]
@@ -134,11 +130,12 @@ if st.session_state.get("obliczono", False):
         ).clip(lower=0)
         df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
         
-        # Filtrujemy df do obliczeń
-        df_calc = df[(df["Dostępne_Netto"] > 0) & (df["Zbiornik"].isin(wybrane_zbiorniki))].copy()
+        # PRZESKALOWANIE BARWY DLA CAŁEJ BAZY DF (Aby dodawane zbiorniki miały tę samą skalę)
+        if "Barwa (Trans)" in df.columns and df["Barwa (Trans)"].max() <= 1.0:
+            df["Barwa (Trans)"] = df["Barwa (Trans)"] * 100
 
-        if "Barwa (Trans)" in df_calc.columns and df_calc["Barwa (Trans)"].max() <= 1.0:
-            df_calc["Barwa (Trans)"] = df_calc["Barwa (Trans)"] * 100
+        # Filtrujemy df do samych obliczeń solvera
+        df_calc = df[(df["Dostępne_Netto"] > 0) & (df["Zbiornik"].isin(wybrane_zbiorniki))].copy()
 
         if pozwol_na_wode:
             woda_df = pd.DataFrame([{
@@ -400,11 +397,10 @@ if st.session_state.get("obliczono", False):
                                     "Barwa Trans [%]": float(row_data["Barwa (Trans)"]) if "Barwa (Trans)" in df.columns else 0.0,
                                     "Barwa Abs": float(row_data["Barwa (Abs)"]) if "Barwa (Abs)" in df.columns else 0.0,
                                 }])
-                                # Dopshortcut do tabeli w session_state i odświeżenie
+                                
                                 st.session_state[key_df] = pd.concat([res_df, new_row], ignore_index=True)
                                 st.rerun()
 
-                    # Przeliczamy nowe parametry na żywo po wpisanych zmianach
                     stats = przelicz_kupaż(edited_df)
 
                     if stats:
