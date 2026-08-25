@@ -95,9 +95,11 @@ pozwol_na_wode = st.sidebar.checkbox(
 
 if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     st.session_state["obliczono"] = True
+    # CZYSZCZENIE CAŁEJ PAMIĘCI EDYCYJNEJ PO KLIKNIĘCIU PRZYCISKU:
     for key in list(st.session_state.keys()):
-        if key.startswith("df_res_"):
+        if key.startswith("df_res_") or key.startswith("editor_"):
             del st.session_state[key]
+    st.rerun()
 
 if st.session_state.get("obliczono", False):
     try:
@@ -248,7 +250,6 @@ if st.session_state.get("obliczono", False):
 
             uzyte_tanki = lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
 
-            # OPOROWANIE WAG DLA 4 WARIANTÓW:
             if podejscie == "min_kwas":
                 prob += norm_kwas * 1000 + uzyte_tanki * 10
             elif podejscie == "min_barwa":
