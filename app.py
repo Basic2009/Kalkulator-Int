@@ -150,124 +150,115 @@ if st.session_state.get("obliczono", False):
             df_calc = pd.concat([df_calc, woda_df], ignore_index=True)
 
         def licz_blend(podejscie):
-          prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
-          v_vars, y_vars, n_vars = {}, {}, {}
+            prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
+            v_vars, y_vars, n_vars = {}, {}, {}
 
-          for idx, row in df_calc.iterrows():
-            t_id = str(row["Zbiornik"]).strip()
-            max_kg = float(row["Dostępne_Netto"])
+            for idx, row in df_calc.iterrows():
+                t_id = str(row["Zbiornik"]).strip()
+                max_kg = float(row["Dostępne_Netto"])
 
-            y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
+                y_vars[t_id] = LpVariable(f"y_{idx}", cat="Binary")
 
-            if t_id == "WODA (Dodatek)":
-              v_vars[t_id] = LpVariable(f"v_woda_{idx}", 0, max_kg)
-              prob += v_vars[t_id] <= max_kg * y_vars[t_id]
+                if t_id == "WODA (Dodatek)":
+                    v_vars[t_id] = LpVariable(f"v_woda_{idx}", 0, max_kg)
+                    prob += v_vars[t_id] <= max_kg * y_vars[t_id]
+                else:
+                    max_steps = int(max_kg // STEP_KG)
+                    n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
+                    v_vars[t_id] = n_vars[t_id] * STEP_KG
+                    prob += n_vars[t_id] <= max_steps * y_vars[t_id]
+
+            prob += (
+                lpSum([v_vars[t] for t in v_vars if t != "WODA (Dodatek)"])
+                == docelowa_ilosc_koncentratu
+            )
+
+            prob += (
+                lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
+                <= max_uzytych_tankow
+            )
+
+            masa_calkowita = lpSum([v_vars[t] for t in v_vars])
+
+            if pozwol_na_wode:
+                prob += (
+                    lpSum([
+                        v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                        for _, row in df_calc.iterrows()
+                    ])
+                    == masa_calkowita * docelowy_brix
+                )
             else:
-              max_steps = int(max_kg // STEP_KG)
-              n_vars[t_id] = LpVariable(f"n_{idx}", 0, max_steps, cat=LpInteger)
-              v_vars[t_id] = n_vars[t_id] * STEP_KG
-              prob += n_vars[t_id] <= max_steps * y_vars[t_id]
+                prob += (
+                    lpSum([
+                        v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                        for _, row in df_calc.iterrows()
+                    ])
+                    >= docelowa_ilosc_koncentratu * docelowy_brix
+                )
 
-          prob += (
-              lpSum([v_vars[t] for t in v_vars if t != "WODA (Dodatek)"])
-              == docelowa_ilosc_koncentratu
-          )
-
-          prob += (
-              lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
-              <= max_uzytych_tankow
-          )
-
-          masa_calkowita = lpSum([v_vars[t] for t in v_vars])
-
-          if pozwol_na_wode:
             prob += (
                 lpSum([
-                    v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
                     for _, row in df_calc.iterrows()
                 ])
-                == masa_calkowita * docelowy_brix
+                >= masa_calkowita * kwas_min
             )
-          else:
             prob += (
                 lpSum([
-                    v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
                     for _, row in df_calc.iterrows()
                 ])
-                >= docelowa_ilosc_koncentratu * docelowy_brix
+                <= masa_calkowita * kwas_max
             )
 
-          prob += (
-              lpSum([
-                  v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                  for _, row in df_calc.iterrows()
-              ])
-              >= masa_calkowita * kwas_min
-          )
-          prob += (
-              lpSum([
-                  v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                  for _, row in df_calc.iterrows()
-              ])
-              <= masa_calkowita * kwas_max
-          )
+            prob += (
+                lpSum([
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                    for _, row in df_calc.iterrows()
+                ])
+                >= masa_calkowita * barwa_min
+            )
+            prob += (
+                lpSum([
+                    v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                    for _, row in df_calc.iterrows()
+                ])
+                <= masa_calkowita * barwa_max
+            )
 
-          prob += (
-              lpSum([
-                  v_vars[str(row["Zbiornik"]).strip()]
-                  * float(row[KOLUMNA_BARWA])
-                  for _, row in df_calc.iterrows()
-              ])
-              >= masa_calkowita * barwa_min
-          )
-          prob += (
-              lpSum([
-                  v_vars[str(row["Zbiornik"]).strip()]
-                  * float(row[KOLUMNA_BARWA])
-                  for _, row in df_calc.iterrows()
-              ])
-              <= masa_calkowita * barwa_max
-          )
+            suma_kwasu = lpSum([
+                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
+                for _, row in df_calc.iterrows()
+            ])
+            suma_barwy = lpSum([
+                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                for _, row in df_calc.iterrows()
+            ])
 
-          suma_kwasu = lpSum([
-              v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-              for _, row in df_calc.iterrows()
-          ])
-          suma_barwy = lpSum([
-              v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-              for _, row in df_calc.iterrows()
-          ])
+            kwas_ref = (kwas_min + kwas_max) / 2.0 if kwas_max > 0 else 1.0
+            barwa_ref = (barwa_min + barwa_max) / 2.0 if barwa_max > 0 else 1.0
 
-          kwas_ref = (kwas_min + kwas_max) / 2.0 if kwas_max > 0 else 1.0
-          barwa_ref = (barwa_min + barwa_max) / 2.0 if barwa_max > 0 else 1.0
+            norm_kwas = suma_kwasu / kwas_ref
 
-          # Normalizacja kwasu (dążymy do jak najniższego)
-          norm_kwas = suma_kwasu / kwas_ref
+            if barwa_jednostka == "Trans":
+                norm_barwa = suma_barwy / barwa_ref
+            else:
+                norm_barwa = (docelowa_ilosc_koncentratu * barwa_max - suma_barwy) / barwa_ref
 
-          if barwa_jednostka == "Trans":
-            # Im niższy Trans % tym lepiej -> po prostu minimalizujemy suma_barwy
-            norm_barwa = suma_barwy / barwa_ref
-          else:
-            # Im wyższa Absorbancja tym lepiej -> minimalizujemy brakującą masę absorbancji
-            norm_barwa = (
-                docelowa_ilosc_koncentratu * barwa_max - suma_barwy
-            ) / barwa_ref
+            uzyte_tanki = lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
 
-          uzyte_tanki = lpSum(
-              [y_vars[t] for t in y_vars if t != "WODA (Dodatek)"]
-          )
+            if podejscie == "min_kwas":
+                prob += norm_kwas * 1000 + uzyte_tanki * 10
+            elif podejscie == "min_barwa":
+                prob += norm_barwa * 1000 + uzyte_tanki * 10
+            elif podejscie == "min_oba":
+                prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
 
-          if podejscie == "min_kwas":
-            prob += norm_kwas * 1000 + uzyte_tanki * 10
-          elif podejscie == "min_barwa":
-            prob += norm_barwa * 1000 + uzyte_tanki * 10
-          elif podejscie == "min_oba":
-            # Czysty balans 50/50 nakierowany na Waszą specyfikację technologiczną
-            prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
+            prob.solve(PULP_CBC_CMD(msg=0))
+            if LpStatus[prob.status] != "Optimal":
+                return None
 
-          prob.solve(PULP_CBC_CMD(msg=0))
-          if LpStatus[prob.status] != "Optimal":
-            return None
             wyniki = []
             for _, row in df_calc.iterrows():
                 t = str(row["Zbiornik"]).strip()
