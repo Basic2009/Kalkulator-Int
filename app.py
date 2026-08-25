@@ -369,7 +369,7 @@ if st.session_state.get("obliczono", False):
                     opcje_zbiornikow = niewykorzystane_df["Zbiornik"].tolist()
 
                     if opcje_zbiornikow:
-                        with st.expander("➕ Dodaj kolejny zbiornik do tego kupażu"):
+                        with st.expander("➕ Dodaj kolejny zbiornik do blenda"):
                             col_add1, col_add2, col_add3 = st.columns([2, 2, 1])
                             wybrany_nowy_tank = col_add1.selectbox(
                                 "Wybierz zbiornik do dodania", opcje_zbiornikow, key=f"sel_add_{kod}"
