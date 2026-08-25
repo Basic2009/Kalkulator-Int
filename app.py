@@ -253,7 +253,7 @@ if st.session_state.get("obliczono", False):
             elif podejscie == "min_barwa":
                 prob += norm_barwa * 1000 + uzyte_tanki * 10
             elif podejscie == "min_oba":
-                prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
+                prob += norm_kwas * 600 + norm_barwa * 500 + uzyte_tanki * 10
 
             prob.solve(PULP_CBC_CMD(msg=0))
             if LpStatus[prob.status] != "Optimal":
