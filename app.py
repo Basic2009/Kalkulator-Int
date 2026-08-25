@@ -341,7 +341,7 @@ if st.session_state.get("obliczono", False):
                     res_df = st.session_state[key_df]
 
                 if res_df is not None and not res_df.empty:
-                    # --- NAKŁADKA STATYSTYK I WYNIKÓW NA GÓRZE ---
+                    # 1. NA GÓRZE: Statystyki i opis wariantu
                     stats = przelicz_kupaż(res_df)
 
                     if stats:
@@ -370,9 +370,8 @@ if st.session_state.get("obliczono", False):
                             st.caption("⚠️ Barwa poza zakresem!")
 
                         st.markdown("---")
-
-                    st.info("💡 Możesz edytować kolumnę **Pobrano [KG]** w tabeli lub ręcznie **dodać kolejny zbiornik** poniżej.")
                     
+                    # 2. NA ŚRODKU: Tabela blendu
                     edited_df = st.data_editor(
                         res_df,
                         column_config={
@@ -397,9 +396,12 @@ if st.session_state.get("obliczono", False):
                         key=f"editor_{kod}"
                     )
 
-                    # Zapis edytowanych wartości do session state
                     st.session_state[key_df] = edited_df
 
+                    # 3. POD TABELĄ: Informacja o edycji
+                    st.info("💡 Możesz edytować kolumnę **Pobrano [KG]** w tabeli powyżej lub ręcznie **dodać kolejny zbiornik** poniżej.")
+
+                    # 4. NA SAMYM DOLE: Sekcja dodawania zbiornika
                     uzyte_nazwy = edited_df["Zbiornik"].tolist()
                     niewykorzystane_df = df[(~df["Zbiornik"].isin(uzyte_nazwy)) & (df["Dostępne_Netto"] > 0)]
                     opcje_zbiornikow = niewykorzystane_df["Zbiornik"].tolist()
