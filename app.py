@@ -93,7 +93,7 @@ pozwol_na_wode = st.sidebar.checkbox(
     "Zbijanie Brixa wodą", value=True
 )
 
-if st.sidebar.button("🚀 Losu Losu", type="primary"):
+if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     st.session_state["obliczono"] = True
     for key in list(st.session_state.keys()):
         if key.startswith("df_res_"):
@@ -248,12 +248,15 @@ if st.session_state.get("obliczono", False):
 
             uzyte_tanki = lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
 
+            # OPOROWANIE WAG DLA 4 WARIANTÓW:
             if podejscie == "min_kwas":
                 prob += norm_kwas * 1000 + uzyte_tanki * 10
             elif podejscie == "min_barwa":
                 prob += norm_barwa * 1000 + uzyte_tanki * 10
-            elif podejscie == "min_oba":
-                prob += norm_kwas * 700 + norm_barwa * 300 + uzyte_tanki * 10
+            elif podejscie == "oba_kwas_80_20":
+                prob += norm_kwas * 800 + norm_barwa * 200 + uzyte_tanki * 10
+            elif podejscie == "oba_barwa_20_80":
+                prob += norm_kwas * 200 + norm_barwa * 800 + uzyte_tanki * 10
 
             prob.solve(PULP_CBC_CMD(msg=0))
             if LpStatus[prob.status] != "Optimal":
@@ -291,16 +294,18 @@ if st.session_state.get("obliczono", False):
 
             return pd.DataFrame(wyniki)
 
-        tab1, tab2, tab3 = st.tabs([
-            "📉 1. Najniższa Kwasowość",
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📉 1. Najniższy Kwas",
             "🎨 2. Najniższa Barwa",
-            "⚖️ 3. Najniższa Kwasowość + Barwa",
+            "⚖️ 3. Kwas > Barwa (80/20)",
+            "🖼️ 4. Barwa > Kwas (20/80)",
         ])
 
         warianty_map = {
             tab1: ("min_kwas", "Wariant z najniższą możliwą kwasowością"),
-            tab2: ("min_barwa", "Wariant z najniższym/najjaśniejszym kolorem"),
-            tab3: ("min_oba", "Wariant ze zrównoważonym najniższym kwasem i barwą"),
+            tab2: ("min_barwa", "Wariant z najniższą/najjaśniejszą barwą"),
+            tab3: ("oba_kwas_80_20", "Wariant zrównoważony z faworyzacją kwasowości (80/20)"),
+            tab4: ("oba_barwa_20_80", "Wariant zrównoważony z faworyzacją barwy (20/80)"),
         }
 
         def przelicz_kupaż(df_edited):
@@ -341,7 +346,6 @@ if st.session_state.get("obliczono", False):
                     res_df = st.session_state[key_df]
 
                 if res_df is not None and not res_df.empty:
-                    # 1. NA GÓRZE: Statystyki i opis wariantu
                     stats = przelicz_kupaż(res_df)
 
                     if stats:
@@ -370,8 +374,7 @@ if st.session_state.get("obliczono", False):
                             st.caption("⚠️ Barwa poza zakresem!")
 
                         st.markdown("---")
-                    
-                    # 2. NA ŚRODKU: Tabela blendu
+
                     edited_df = st.data_editor(
                         res_df,
                         column_config={
@@ -398,10 +401,8 @@ if st.session_state.get("obliczono", False):
 
                     st.session_state[key_df] = edited_df
 
-                    # 3. POD TABELĄ: Informacja o edycji
                     st.info("💡 Możesz edytować kolumnę **Pobrano [KG]** w tabeli powyżej lub ręcznie **dodać kolejny zbiornik** poniżej.")
 
-                    # 4. NA SAMYM DOLE: Sekcja dodawania zbiornika
                     uzyte_nazwy = edited_df["Zbiornik"].tolist()
                     niewykorzystane_df = df[(~df["Zbiornik"].isin(uzyte_nazwy)) & (df["Dostępne_Netto"] > 0)]
                     opcje_zbiornikow = niewykorzystane_df["Zbiornik"].tolist()
