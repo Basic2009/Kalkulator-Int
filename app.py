@@ -39,21 +39,16 @@ st.sidebar.header("⚙️ Parametry Docelowe")
 # Domyślne zaznaczenie: True tylko dla zbiorników zaczynających się od "TZH-"
 domyslne_zaznaczenie = [z.startswith("TZH-") for z in lista_zbiornikow]
 
-# Tworzymy DataFrame dla tabelki z checkboxami
 df_selekcja_init = pd.DataFrame({
     "Zbiornik": lista_zbiornikow,
     "Dostępny": domyslne_zaznaczenie
 })
 
-# ZWIJANA SEKCJA:
 with st.sidebar.expander("📋 Wybór dostępnych zbiorników", expanded=False):
     df_selekcja = st.data_editor(
         df_selekcja_init,
         column_config={
-            "Dostępny": st.column_config.CheckboxColumn(
-                "Użyj",
-                default=False,
-            ),
+            "Dostępny": st.column_config.CheckboxColumn("Użyj", default=False),
             "Zbiornik": st.column_config.TextColumn("Zbiornik", disabled=True),
         },
         disabled=["Zbiornik"],
@@ -103,6 +98,10 @@ pozwol_na_wode = st.sidebar.checkbox(
 
 if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     st.session_state["obliczono"] = True
+    # Czyszczenie starych wyników przy przeliczeniu od nowa
+    for key in list(st.session_state.keys()):
+        if key.startswith("df_res_"):
+            del st.session_state[key]
 
 if st.session_state.get("obliczono", False):
     try:
@@ -134,12 +133,12 @@ if st.session_state.get("obliczono", False):
             df["Ilość (KG)"] - df["Zablokowana Ilość"]
         ).clip(lower=0)
         df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
-        df = df[df["Dostępne_Netto"] > 0]
+        
+        # Filtrujemy df do obliczeń
+        df_calc = df[(df["Dostępne_Netto"] > 0) & (df["Zbiornik"].isin(wybrane_zbiorniki))].copy()
 
-        df = df[df["Zbiornik"].isin(wybrane_zbiorniki)]
-
-        if "Barwa (Trans)" in df.columns and df["Barwa (Trans)"].max() <= 1.0:
-            df["Barwa (Trans)"] = df["Barwa (Trans)"] * 100
+        if "Barwa (Trans)" in df_calc.columns and df_calc["Barwa (Trans)"].max() <= 1.0:
+            df_calc["Barwa (Trans)"] = df_calc["Barwa (Trans)"] * 100
 
         if pozwol_na_wode:
             woda_df = pd.DataFrame([{
@@ -153,13 +152,13 @@ if st.session_state.get("obliczono", False):
                 "Barwa (Trans)": 100.0,
                 "Barwa (Abs)": 0.0,
             }])
-            df = pd.concat([df, woda_df], ignore_index=True)
+            df_calc = pd.concat([df_calc, woda_df], ignore_index=True)
 
         def licz_blend(podejscie):
             prob = LpProblem(f"Blend_{podejscie}", LpMinimize)
             v_vars, y_vars, n_vars = {}, {}, {}
 
-            for idx, row in df.iterrows():
+            for idx, row in df_calc.iterrows():
                 t_id = str(row["Zbiornik"]).strip()
                 max_kg = float(row["Dostępne_Netto"])
                 
@@ -190,7 +189,7 @@ if st.session_state.get("obliczono", False):
                 prob += (
                     lpSum([
                         v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
-                        for _, row in df.iterrows()
+                        for _, row in df_calc.iterrows()
                     ])
                     == masa_calkowita * docelowy_brix
                 )
@@ -198,7 +197,7 @@ if st.session_state.get("obliczono", False):
                 prob += (
                     lpSum([
                         v_vars[str(row["Zbiornik"]).strip()] * float(row["Brix"])
-                        for _, row in df.iterrows()
+                        for _, row in df_calc.iterrows()
                     ])
                     >= docelowa_ilosc_koncentratu * docelowy_brix
                 )
@@ -206,14 +205,14 @@ if st.session_state.get("obliczono", False):
             prob += (
                 lpSum([
                     v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                    for _, row in df.iterrows()
+                    for _, row in df_calc.iterrows()
                 ])
                 >= masa_calkowita * kwas_min
             )
             prob += (
                 lpSum([
                     v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                    for _, row in df.iterrows()
+                    for _, row in df_calc.iterrows()
                 ])
                 <= masa_calkowita * kwas_max
             )
@@ -221,25 +220,25 @@ if st.session_state.get("obliczono", False):
             prob += (
                 lpSum([
                     v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-                    for _, row in df.iterrows()
+                    for _, row in df_calc.iterrows()
                 ])
                 >= masa_calkowita * barwa_min
             )
             prob += (
                 lpSum([
                     v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-                    for _, row in df.iterrows()
+                    for _, row in df_calc.iterrows()
                 ])
                 <= masa_calkowita * barwa_max
             )
 
             suma_kwasu = lpSum([
-                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                for _, row in df.iterrows()
+                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
+                for _, row in df_calc.iterrows()
             ])
             suma_barwy = lpSum([
                 v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-                for _, row in df.iterrows()
+                for _, row in df_calc.iterrows()
             ])
             uzyte_tanki = lpSum(
                 [y_vars[t] for t in y_vars if t != "WODA (Dodatek)"]
@@ -257,7 +256,7 @@ if st.session_state.get("obliczono", False):
                 return None
 
             wyniki = []
-            for _, row in df.iterrows():
+            for _, row in df_calc.iterrows():
                 t = str(row["Zbiornik"]).strip()
                 is_woda = (t == "WODA (Dodatek)")
 
@@ -300,7 +299,6 @@ if st.session_state.get("obliczono", False):
             tab3: ("min_oba", "Wariant ze zrównoważonym najniższym kwasem i barwą"),
         }
 
-        # Funkcja przeliczająca parametry na żywo po ręcznej edycji tabeli przez operatora
         def przelicz_kupaż(df_edited):
             tot_mass = df_edited["Pobrano [KG]"].sum()
             if tot_mass <= 0:
@@ -314,7 +312,6 @@ if st.session_state.get("obliczono", False):
             
             uzyte_tanki = len(df_edited[(df_edited["Zbiornik"] != "WODA (Dodatek)") & (df_edited["Pobrano [KG]"] > 0)])
 
-            # Aktualizacja pozostałości w zbiornikach
             df_edited["Pozostanie [KG]"] = df_edited.apply(
                 lambda r: "—" if r["Zbiornik"] == "WODA (Dodatek)" else round(r["Dostępne [KG]"] - r["Pobrano [KG]"], 1),
                 axis=1
@@ -332,7 +329,6 @@ if st.session_state.get("obliczono", False):
 
         for tab, (kod, opisy) in warianty_map.items():
             with tab:
-                # Generujemy wyjściowy skład tylko raz do stanu sesji
                 key_df = f"df_res_{kod}"
                 if key_df not in st.session_state:
                     res_df = licz_blend(kod)
@@ -341,15 +337,13 @@ if st.session_state.get("obliczono", False):
                     res_df = st.session_state[key_df]
 
                 if res_df is not None and not res_df.empty:
-                    st.info("💡 **Tryb interaktywny:** Możesz ręcznie zmienić wartości w kolumnie **Pobrano [KG]** w poniższej tabeli. Wyniki przeliczą się automatycznie.")
+                    st.info("💡 Możesz edytować kolumnę **Pobrano [KG]** w tabeli lub ręcznie **dodać kolejny zbiornik** poniżej.")
                     
-                    # Edytowalna tabela
                     edited_df = st.data_editor(
                         res_df,
                         column_config={
                             "Pobrano [KG]": st.column_config.NumberColumn(
                                 "Pobrano [KG]",
-                                help="Edytuj ilość pobieranego surowca",
                                 min_value=0.0,
                                 step=100.0,
                             ),
@@ -369,6 +363,47 @@ if st.session_state.get("obliczono", False):
                         key=f"editor_{kod}"
                     )
 
+                    # --- SEKCJA DODAWANIA NOWEGO ZBIORNIKA ---
+                    uzyte_nazwy = edited_df["Zbiornik"].tolist()
+                    niewykorzystane_df = df[(~df["Zbiornik"].isin(uzyte_nazwy)) & (df["Dostępne_Netto"] > 0)]
+                    opcje_zbiornikow = niewykorzystane_df["Zbiornik"].tolist()
+
+                    if opcje_zbiornikow:
+                        with st.expander("➕ Dodaj kolejny zbiornik do tego kupażu"):
+                            col_add1, col_add2, col_add3 = st.columns([2, 2, 1])
+                            wybrany_nowy_tank = col_add1.selectbox(
+                                "Wybierz zbiornik do dodania", opcje_zbiornikow, key=f"sel_add_{kod}"
+                            )
+                            dostepne_kg_tank = niewykorzystane_df[niewykorzystane_df["Zbiornik"] == wybrany_nowy_tank]["Dostępne_Netto"].values[0]
+                            
+                            pobrana_ilosc_nowy = col_add2.number_input(
+                                f"Ilość do pobrania [KG] (max: {dostepne_kg_tank:.0f})",
+                                min_value=100.0,
+                                max_value=float(dostepne_kg_tank),
+                                step=100.0,
+                                value=1000.0,
+                                key=f"num_add_{kod}"
+                            )
+                            
+                            if col_add3.button("Dodaj do tabeli", key=f"btn_add_{kod}"):
+                                row_data = niewykorzystane_df[niewykorzystane_df["Zbiornik"] == wybrany_nowy_tank].iloc[0]
+                                new_row = pd.DataFrame([{
+                                    "Zbiornik": wybrany_nowy_tank,
+                                    "Pobrano [KG]": pobrana_ilosc_nowy,
+                                    "Stan Aktualny [KG]": float(row_data["Ilość (KG)"]),
+                                    "Zablokowane [KG]": float(row_data["Zablokowana Ilość"]),
+                                    "Dostępne [KG]": float(row_data["Dostępne_Netto"]),
+                                    "Pozostanie [KG]": round(float(row_data["Dostępne_Netto"]) - pobrana_ilosc_nowy, 1),
+                                    "Brix [°Bx]": float(row_data["Brix"]),
+                                    "Kwas MA": float(row_data["Kwasowość (MA)"]) if "Kwasowość (MA)" in df.columns else 0.0,
+                                    "Kwas CA": float(row_data["Kwasowość (CA)"]) if "Kwasowość (CA)" in df.columns else 0.0,
+                                    "Barwa Trans [%]": float(row_data["Barwa (Trans)"]) if "Barwa (Trans)" in df.columns else 0.0,
+                                    "Barwa Abs": float(row_data["Barwa (Abs)"]) if "Barwa (Abs)" in df.columns else 0.0,
+                                }])
+                                # Dopshortcut do tabeli w session_state i odświeżenie
+                                st.session_state[key_df] = pd.concat([res_df, new_row], ignore_index=True)
+                                st.rerun()
+
                     # Przeliczamy nowe parametry na żywo po wpisanych zmianach
                     stats = przelicz_kupaż(edited_df)
 
@@ -378,7 +413,6 @@ if st.session_state.get("obliczono", False):
                         
                         col1.metric("Masa Całkowita (z wodą)", f"{stats['tot_mass']:.1f} KG")
                         
-                        # Flagi walidacyjne zakresów
                         brix_ok = stats['brix'] >= docelowy_brix
                         kwas_val = stats['kwas_ca'] if kwas_jednostka == 'CA' else stats['kwas_ma']
                         kwas_ok = kwas_min <= kwas_val <= kwas_max
@@ -398,7 +432,6 @@ if st.session_state.get("obliczono", False):
                         if not barwa_ok:
                             st.caption("⚠️ Barwa poza zakresem!")
 
-                        # Sprawdzanie przekroczenia dostępnych stanów magazynowych
                         przekroczenia = edited_df[edited_df["Pobrano [KG]"] > edited_df["Dostępne [KG]"]]
                         if not przekroczenia.empty:
                             st.error(f"🚨 Przekroczono dostępne stany w zbiornikach: {', '.join(przekroczenia['Zbiornik'].tolist())}!")
