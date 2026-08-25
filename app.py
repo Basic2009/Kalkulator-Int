@@ -207,7 +207,7 @@ if st.session_state.get("obliczono", False):
             prob += (
                 lpSum([
                     v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                    for _, row in df_calc.iterrows()
+                    for _, row in df.iterrows() if str(row["Zbiornik"]).strip() in v_vars
                 ])
                 <= masa_calkowita * kwas_max
             )
@@ -227,19 +227,21 @@ if st.session_state.get("obliczono", False):
                 <= masa_calkowita * barwa_max
             )
 
-            # NORMALIZACJA FUNKCJI CELU (DZIELENIE PRZEZ MASĘ CAŁKOWITĄ I ŚRODEK ZAKRESU):
-            srednia_kwasu = lpSum([v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS]) for _, row in df_calc.iterrows()]) / masa_calkowita
-            srednia_barwy = lpSum([v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA]) for _, row in df_calc.iterrows()]) / masa_calkowita
+            # LINIOWA NORMALIZACJA FUNKCJI CELU (BEZ DZIELENIA PRZEZ LpVariable):
+            suma_kwasu = lpSum([v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS]) for _, row in df_calc.iterrows()])
+            suma_barwy = lpSum([v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA]) for _, row in df_calc.iterrows()])
 
             kwas_ref = (kwas_min + kwas_max) / 2.0 if kwas_max > 0 else 1.0
             barwa_ref = (barwa_min + barwa_max) / 2.0 if barwa_max > 0 else 1.0
 
-            norm_kwas = srednia_kwasu / kwas_ref
+            # Skalujemy przez stałą wartość referencyjną
+            norm_kwas = suma_kwasu / kwas_ref
             
             if barwa_jednostka == "Trans":
-                norm_barwa = (100.0 - srednia_barwy) / (100.0 - barwa_ref if barwa_ref < 100 else 1.0)
+                # Dla Trans % im wyżej tym lepiej -> minimalizujemy niedobór do 100% z masy docelowej
+                norm_barwa = (docelowa_ilosc_koncentratu * 100.0 - suma_barwy) / (100.0 - barwa_ref if barwa_ref < 100 else 1.0)
             else:
-                norm_barwa = srednia_barwy / barwa_ref
+                norm_barwa = suma_barwy / barwa_ref
 
             uzyte_tanki = lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
 
@@ -248,7 +250,7 @@ if st.session_state.get("obliczono", False):
             elif podejscie == "min_barwa":
                 prob += norm_barwa * 1000 + uzyte_tanki * 10
             elif podejscie == "min_oba":
-                # IDEALNY BALANS 50/50:
+                # Równomierny balans 50/50 bez błędów liniowości
                 prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
 
             prob.solve(PULP_CBC_CMD(msg=0))
