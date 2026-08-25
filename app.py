@@ -23,7 +23,6 @@ def pobierz_dane(file_id):
     return pd.read_excel(io.BytesIO(response.content), engine="openpyxl")
 
 
-# Pobieramy wstępnie dane do tabeli wyboru zbiorników
 try:
     df_raw = pobierz_dane(gdrive_id)
     df_raw.columns = df_raw.columns.str.strip()
@@ -33,10 +32,8 @@ try:
 except Exception:
     lista_zbiornikow = []
 
-# Sidebar - Parametry wejściowe
 st.sidebar.header("⚙️ Parametry Docelowe")
 
-# Domyślne zaznaczenie: True tylko dla zbiorników zaczynających się od "TZH-"
 domyslne_zaznaczenie = [z.startswith("TZH-") for z in lista_zbiornikow]
 
 df_selekcja_init = pd.DataFrame({
@@ -98,7 +95,6 @@ pozwol_na_wode = st.sidebar.checkbox(
 
 if st.sidebar.button("🚀 OBLICZ BLENDY", type="primary"):
     st.session_state["obliczono"] = True
-    # Czyszczenie starych wyników przy przeliczeniu od nowa
     for key in list(st.session_state.keys()):
         if key.startswith("df_res_"):
             del st.session_state[key]
@@ -134,11 +130,9 @@ if st.session_state.get("obliczono", False):
         ).clip(lower=0)
         df = df.dropna(subset=["Zbiornik", KOLUMNA_KWAS, KOLUMNA_BARWA, "Brix"])
         
-        # PRZESKALOWANIE BARWY DLA CAŁEJ BAZY DF
         if "Barwa (Trans)" in df.columns and df["Barwa (Trans)"].max() <= 1.0:
             df["Barwa (Trans)"] = df["Barwa (Trans)"] * 100
 
-        # Filtrujemy df do obliczeń
         df_calc = df[(df["Dostępne_Netto"] > 0) & (df["Zbiornik"].isin(wybrane_zbiorniki))].copy()
 
         if pozwol_na_wode:
@@ -233,34 +227,29 @@ if st.session_state.get("obliczono", False):
                 <= masa_calkowita * barwa_max
             )
 
-            # TUTAJ BYŁ BŁĄD – POPRAWIONO NA KOLUMNA_KWAS
-            suma_kwasu = lpSum([
-                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS])
-                for _, row in df_calc.iterrows()
-            ])
-            suma_barwy = lpSum([
-                v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA])
-                for _, row in df_calc.iterrows()
-            ])
-            uzyte_tanki = lpSum(
-                [y_vars[t] for t in y_vars if t != "WODA (Dodatek)"]
-            )
+            # NORMALIZACJA FUNKCJI CELU (DZIELENIE PRZEZ MASĘ CAŁKOWITĄ I ŚRODEK ZAKRESU):
+            srednia_kwasu = lpSum([v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_KWAS]) for _, row in df_calc.iterrows()]) / masa_calkowita
+            srednia_barwy = lpSum([v_vars[str(row["Zbiornik"]).strip()] * float(row[KOLUMNA_BARWA]) for _, row in df_calc.iterrows()]) / masa_calkowita
 
-            # NORMALIZACJA WARIANTU HYBRYDOWEGO (Skalowanie wartości do wspólnego rzędu wielkości):
             kwas_ref = (kwas_min + kwas_max) / 2.0 if kwas_max > 0 else 1.0
             barwa_ref = (barwa_min + barwa_max) / 2.0 if barwa_max > 0 else 1.0
 
-            # Wzajemny stosunek kwasu i barwy staje się zrównoważony:
-            norm_kwas = suma_kwasu / kwas_ref
-            norm_barwa = suma_barwy / barwa_ref
+            norm_kwas = srednia_kwasu / kwas_ref
+            
+            if barwa_jednostka == "Trans":
+                norm_barwa = (100.0 - srednia_barwy) / (100.0 - barwa_ref if barwa_ref < 100 else 1.0)
+            else:
+                norm_barwa = srednia_barwy / barwa_ref
+
+            uzyte_tanki = lpSum([y_vars[t] for t in y_vars if t != "WODA (Dodatek)"])
 
             if podejscie == "min_kwas":
-              prob += norm_kwas * 1000 + uzyte_tanki * 10
+                prob += norm_kwas * 1000 + uzyte_tanki * 10
             elif podejscie == "min_barwa":
-              prob += norm_barwa * 1000 + uzyte_tanki * 10
+                prob += norm_barwa * 1000 + uzyte_tanki * 10
             elif podejscie == "min_oba":
-              # Równomierny balans 50/50 niezależnie od użytej jednostki (Trans / Abs / CA / MA)
-              prob += norm_kwas * 600 + norm_barwa * 500 + uzyte_tanki * 10
+                # IDEALNY BALANS 50/50:
+                prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
 
             prob.solve(PULP_CBC_CMD(msg=0))
             if LpStatus[prob.status] != "Optimal":
@@ -374,7 +363,6 @@ if st.session_state.get("obliczono", False):
                         key=f"editor_{kod}"
                     )
 
-                    # --- SEKCJA DODAWANIA NOWEGO ZBIORNIKA ---
                     uzyte_nazwy = edited_df["Zbiornik"].tolist()
                     niewykorzystane_df = df[(~df["Zbiornik"].isin(uzyte_nazwy)) & (df["Dostępne_Netto"] > 0)]
                     opcje_zbiornikow = niewykorzystane_df["Zbiornik"].tolist()
