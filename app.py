@@ -341,6 +341,36 @@ if st.session_state.get("obliczono", False):
                     res_df = st.session_state[key_df]
 
                 if res_df is not None and not res_df.empty:
+                    # --- NAKŁADKA STATYSTYK I WYNIKÓW NA GÓRZE ---
+                    stats = przelicz_kupaż(res_df)
+
+                    if stats:
+                        st.success(f"{opisy} | Użyte tanki: {stats['uzyte_tanki']}")
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        col1.metric("Masa Całkowita (z wodą)", f"{stats['tot_mass']:.1f} KG")
+                        
+                        brix_ok = stats['brix'] >= docelowy_brix
+                        kwas_val = stats['kwas_ca'] if kwas_jednostka == 'CA' else stats['kwas_ma']
+                        kwas_ok = kwas_min <= kwas_val <= kwas_max
+                        
+                        barwa_val = stats['barwa_trans'] if barwa_jednostka == 'Trans' else stats['barwa_abs']
+                        barwa_ok = barwa_min <= barwa_val <= barwa_max
+
+                        col2.metric("Wynikowy Brix", f"{stats['brix']} °Bx")
+                        if not brix_ok:
+                            st.caption("⚠️ Brix poniżej minimum!")
+
+                        col3.metric("Wynikowa Kwasowość", f"{kwas_val} {kwas_jednostka}")
+                        if not kwas_ok:
+                            st.caption("⚠️ Kwasowość poza zakresem!")
+
+                        col4.metric("Wynikowa Barwa", f"{barwa_val} {barwa_jednostka}")
+                        if not barwa_ok:
+                            st.caption("⚠️ Barwa poza zakresem!")
+
+                        st.markdown("---")
+
                     st.info("💡 Możesz edytować kolumnę **Pobrano [KG]** w tabeli lub ręcznie **dodać kolejny zbiornik** poniżej.")
                     
                     edited_df = st.data_editor(
@@ -366,6 +396,9 @@ if st.session_state.get("obliczono", False):
                         use_container_width=True,
                         key=f"editor_{kod}"
                     )
+
+                    # Zapis edytowanych wartości do session state
+                    st.session_state[key_df] = edited_df
 
                     uzyte_nazwy = edited_df["Zbiornik"].tolist()
                     niewykorzystane_df = df[(~df["Zbiornik"].isin(uzyte_nazwy)) & (df["Dostępne_Netto"] > 0)]
@@ -404,39 +437,12 @@ if st.session_state.get("obliczono", False):
                                     "Barwa Abs": float(row_data["Barwa (Abs)"]) if "Barwa (Abs)" in df.columns else 0.0,
                                 }])
                                 
-                                st.session_state[key_df] = pd.concat([res_df, new_row], ignore_index=True)
+                                st.session_state[key_df] = pd.concat([edited_df, new_row], ignore_index=True)
                                 st.rerun()
 
-                    stats = przelicz_kupaż(edited_df)
-
-                    if stats:
-                        st.success(f"{opisy} | Użyte tanki: {stats['uzyte_tanki']}")
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        col1.metric("Masa Całkowita (z wodą)", f"{stats['tot_mass']:.1f} KG")
-                        
-                        brix_ok = stats['brix'] >= docelowy_brix
-                        kwas_val = stats['kwas_ca'] if kwas_jednostka == 'CA' else stats['kwas_ma']
-                        kwas_ok = kwas_min <= kwas_val <= kwas_max
-                        
-                        barwa_val = stats['barwa_trans'] if barwa_jednostka == 'Trans' else stats['barwa_abs']
-                        barwa_ok = barwa_min <= barwa_val <= barwa_max
-
-                        col2.metric("Wynikowy Brix", f"{stats['brix']} °Bx")
-                        if not brix_ok:
-                            st.caption("⚠️ Brix poniżej minimum!")
-
-                        col3.metric("Wynikowa Kwasowość", f"{kwas_val} {kwas_jednostka}")
-                        if not kwas_ok:
-                            st.caption("⚠️ Kwasowość poza zakresem!")
-
-                        col4.metric("Wynikowa Barwa", f"{barwa_val} {barwa_jednostka}")
-                        if not barwa_ok:
-                            st.caption("⚠️ Barwa poza zakresem!")
-
-                        przekroczenia = edited_df[edited_df["Pobrano [KG]"] > edited_df["Dostępne [KG]"]]
-                        if not przekroczenia.empty:
-                            st.error(f"🚨 Przekroczono dostępne stany w zbiornikach: {', '.join(przekroczenia['Zbiornik'].tolist())}!")
+                    przekroczenia = edited_df[edited_df["Pobrano [KG]"] > edited_df["Dostępne [KG]"]]
+                    if not przekroczenia.empty:
+                        st.error(f"🚨 Przekroczono dostępne stany w zbiornikach: {', '.join(przekroczenia['Zbiornik'].tolist())}!")
 
                 else:
                     st.error("Brak możliwości ułożenia blendu w podanych zakresach. Sprawdź zaznaczone zbiorniki lub poszerz parametry.")
