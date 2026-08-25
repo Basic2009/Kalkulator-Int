@@ -304,7 +304,7 @@ if st.session_state.get("obliczono", False):
 
         warianty_map = {
             tab1: ("min_kwas", "Wariant z najniższą możliwą kwasowością"),
-            tab2: ("min_barwa", "Wariant z najniższą/najjaśniejszą barwą"),
+            tab2: ("min_barwa", "Wariant z najniższą"),
             tab3: ("oba_kwas_80_20", "Wariant zrównoważony z faworyzacją kwasowości (80/20)"),
             tab4: ("oba_barwa_20_80", "Wariant zrównoważony z faworyzacją barwy (20/80)"),
         }
