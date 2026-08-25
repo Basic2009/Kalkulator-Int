@@ -260,7 +260,7 @@ if st.session_state.get("obliczono", False):
               prob += norm_barwa * 1000 + uzyte_tanki * 10
             elif podejscie == "min_oba":
               # Równomierny balans 50/50 niezależnie od użytej jednostki (Trans / Abs / CA / MA)
-              prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
+              prob += norm_kwas * 600 + norm_barwa * 500 + uzyte_tanki * 10
 
             prob.solve(PULP_CBC_CMD(msg=0))
             if LpStatus[prob.status] != "Optimal":
