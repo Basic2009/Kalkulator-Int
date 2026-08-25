@@ -246,12 +246,21 @@ if st.session_state.get("obliczono", False):
                 [y_vars[t] for t in y_vars if t != "WODA (Dodatek)"]
             )
 
+            # NORMALIZACJA WARIANTU HYBRYDOWEGO (Skalowanie wartości do wspólnego rzędu wielkości):
+            kwas_ref = (kwas_min + kwas_max) / 2.0 if kwas_max > 0 else 1.0
+            barwa_ref = (barwa_min + barwa_max) / 2.0 if barwa_max > 0 else 1.0
+
+            # Wzajemny stosunek kwasu i barwy staje się zrównoważony:
+            norm_kwas = suma_kwasu / kwas_ref
+            norm_barwa = suma_barwy / barwa_ref
+
             if podejscie == "min_kwas":
-                prob += suma_kwasu * 1000 + uzyte_tanki * 10
+              prob += norm_kwas * 1000 + uzyte_tanki * 10
             elif podejscie == "min_barwa":
-                prob += suma_barwy * 1000 + uzyte_tanki * 10
+              prob += norm_barwa * 1000 + uzyte_tanki * 10
             elif podejscie == "min_oba":
-                prob += suma_kwasu * 10000 + suma_barwy * 1000 + uzyte_tanki * 10
+              # Równomierny balans 50/50 niezależnie od użytej jednostki (Trans / Abs / CA / MA)
+              prob += norm_kwas * 500 + norm_barwa * 500 + uzyte_tanki * 10
 
             prob.solve(PULP_CBC_CMD(msg=0))
             if LpStatus[prob.status] != "Optimal":
